@@ -1,0 +1,27 @@
+{
+  "name": "terminalx",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "backend": "cd backend && source venv/bin/activate && python run.py",
+    "start:all": "./start.sh",
+    "docker:up": "docker-compose up --build",
+    "docker:down": "docker-compose down"
+  },
+  "dependencies": {
+    "daisyui": "^5.0.43",
+    "lucide-react": "^0.525.0",
+    "next": "15.3.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "framer-motion": "^12.23.16"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "tailwindcss": "^4"
+  }
+}
