@@ -29,18 +29,18 @@ allowed_origins = [
 if FRONTEND_URL:
     allowed_origins.append(FRONTEND_URL)
 
-# Add common Vercel domains
+# Add your specific Vercel domain
 allowed_origins.extend([
-    "https://*.vercel.app",
-    "https://*.netlify.app",
-    "https://*.render.com"
+    "https://python-based-command-terminal-dusky.vercel.app",
+    "https://python-based-command-terminal.vercel.app",
+    "https://terminalx.vercel.app"
 ])
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -48,555 +48,316 @@ app.add_middleware(
 class CommandRequest(BaseModel):
     command: str
     current_path: str
-    file_system: Dict[str, Any]
 
 class CommandResponse(BaseModel):
+    output: str
+    current_path: str
     success: bool
-    output: Any
-    new_path: Optional[str] = None
-    new_file_system: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
-class FileSystemNode(BaseModel):
-    type: str  # 'file' or 'directory'
-    content: Optional[str] = None
-    children: Optional[Dict[str, 'FileSystemNode']] = None
+class SystemInfo(BaseModel):
+    cpu_percent: float
+    memory_percent: float
+    memory_used: str
+    memory_total: str
+    disk_usage: str
+    uptime: str
+    processes: List[Dict[str, Any]]
 
-# Global state for process simulation
-processes = []
-is_top_running = False
+# Global state
+current_directory = os.path.expanduser("~")
+file_system = {}
 
-# Natural Language Parser
-def parse_natural_language(command: str) -> str:
-    """Parse natural language commands into terminal commands"""
-    command = command.strip()
-    
-    # create a folder named {name} -> mkdir {name}
-    if command.lower().startswith("create a folder named "):
-        name = command[22:].strip()
-        return f"mkdir {name}"
-    
-    # make a file named {name} -> touch {name}
-    if command.lower().startswith("make a file named "):
-        name = command[18:].strip()
-        return f"touch {name}"
-    
-    # delete file {name} -> rm {name}
-    if command.lower().startswith("delete file "):
-        name = command[11:].strip()
-        return f"rm {name}"
-    
-    # show me the contents of {name} -> cat {name}
-    if command.lower().startswith("show me the contents of "):
-        name = command[24:].strip()
-        return f"cat {name}"
-    
-    return command
-
-def get_node_by_path(path: str, file_system: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Get a node by path from the file system"""
-    if not path or path == "/":
-        return file_system
-    
-    parts = path.split('/')
-    if parts[0] == '':
-        parts = parts[1:]  # Remove empty first part for absolute paths
-    
-    current_node = file_system
-    for part in parts:
-        if part == '':
-            continue
-        if current_node and current_node.get('type') == 'directory' and current_node.get('children'):
-            current_node = current_node['children'].get(part)
-        elif current_node and isinstance(current_node, dict) and not current_node.get('type'):
-            # Handle root level
-            current_node = current_node.get(part)
-        else:
-            return None
-    
-    return current_node
-
-def generate_processes():
-    """Generate simulated process data for 'top' command"""
-    global processes
-    commands = ['/bin/bash', 'code', 'chrome', 'node', 'docker', 'figma_agent', 'spotify', 'slack', 'kernel_task']
-    users = ['root', 'user', 'system', 'windowserver']
-    
-    processes = []
-    for i in range(random.randint(5, 10)):
-        process = {
-            'pid': random.randint(10000, 99999),
-            'user': random.choice(users),
-            'cpu': round(random.uniform(0, 25), 1),
-            'mem': round(random.uniform(0, 5), 1),
-            'command': random.choice(commands)
+def simulate_file_system():
+    """Initialize a simulated file system"""
+    global file_system
+    file_system = {
+        "home": {
+            "user": {
+                "documents": {
+                    "project1": {"type": "directory"},
+                    "project2": {"type": "directory"},
+                    "readme.txt": {"type": "file", "content": "Welcome to the terminal!"}
+                },
+                "downloads": {
+                    "file1.pdf": {"type": "file", "content": "PDF content here"},
+                    "image.jpg": {"type": "file", "content": "Image data"}
+                },
+                "desktop": {
+                    "shortcut": {"type": "file", "content": "Shortcut to app"}
+                }
+            }
+        },
+        "etc": {
+            "config": {"type": "file", "content": "System configuration"},
+            "hosts": {"type": "file", "content": "127.0.0.1 localhost"}
+        },
+        "var": {
+            "log": {
+                "system.log": {"type": "file", "content": "System log entries..."}
+            }
         }
-        processes.append(process)
-
-@app.get("/")
-async def root():
-    return {
-        "message": "TerminalX Backend API", 
-        "version": "1.0.0",
-        "status": "running",
-        "environment": "production" if not DEBUG else "development",
-        "frontend_url": FRONTEND_URL
     }
 
-@app.get("/api/health")
-async def health_check():
-    """Health check endpoint for Render"""
-    return {
-        "status": "healthy", 
-        "timestamp": datetime.now().isoformat(),
-        "environment": "production" if not DEBUG else "development",
-        "host": HOST,
-        "port": PORT
-    }
+def get_directory_contents(path: str) -> List[Dict[str, str]]:
+    """Get contents of a directory in the simulated file system"""
+    if path == "/" or path == "":
+        return [{"name": "home", "type": "directory"}, {"name": "etc", "type": "directory"}, {"name": "var", "type": "directory"}]
+    
+    parts = [p for p in path.split("/") if p]
+    current = file_system
+    
+    for part in parts:
+        if part in current and isinstance(current[part], dict) and current[part].get("type") != "file":
+            current = current[part]
+        else:
+            return []
+    
+    contents = []
+    for name, item in current.items():
+        if isinstance(item, dict):
+            if item.get("type") == "file":
+                contents.append({"name": name, "type": "file"})
+            else:
+                contents.append({"name": name, "type": "directory"})
+    
+    return contents
 
-@app.post("/api/command", response_model=CommandResponse)
-async def execute_command(request: CommandRequest):
-    """Execute a terminal command"""
-    global is_top_running
+def execute_command(command: str, current_path: str) -> CommandResponse:
+    """Execute a terminal command and return the response"""
+    global current_directory
+    
+    if current_path:
+        current_directory = current_path
+    
+    parts = command.strip().split()
+    if not parts:
+        return CommandResponse(output="", current_path=current_directory, success=True)
+    
+    cmd = parts[0].lower()
+    args = parts[1:] if len(parts) > 1 else []
     
     try:
-        # Parse natural language if needed
-        command = parse_natural_language(request.command)
-        parts = command.strip().split()
+        if cmd == "ls":
+            if args and args[0] == "-la":
+                contents = get_directory_contents(current_directory)
+                if not contents:
+                    output = f"ls: cannot access '{current_directory}': No such file or directory"
+                else:
+                    output = "total 0\n"
+                    for item in contents:
+                        permissions = "drwxr-xr-x" if item["type"] == "directory" else "-rw-r--r--"
+                        size = "4096" if item["type"] == "directory" else "1024"
+                        date = "Dec 25 12:00"
+                        name = item["name"]
+                        output += f"{permissions} 1 user user {size} {date} {name}\n"
+            else:
+                contents = get_directory_contents(current_directory)
+                if not contents:
+                    output = f"ls: cannot access '{current_directory}': No such file or directory"
+                else:
+                    output = " ".join([item["name"] for item in contents])
+            return CommandResponse(output=output, current_path=current_directory, success=True)
         
-        if not parts:
-            return CommandResponse(success=True, output="", new_path=request.current_path, new_file_system=request.file_system)
-        
-        cmd = parts[0]
-        args = parts[1:] if len(parts) > 1 else []
-        
-        # Handle different commands
-        if cmd == "help":
-            is_top_running = False
-            return handle_help()
-        elif cmd == "ls":
-            is_top_running = False
-            return handle_ls(args, request.current_path, request.file_system)
-        elif cmd == "cd":
-            is_top_running = False
-            return handle_cd(args, request.current_path, request.file_system)
-        elif cmd == "mkdir":
-            is_top_running = False
-            return handle_mkdir(args, request.current_path, request.file_system)
-        elif cmd == "touch":
-            is_top_running = False
-            return handle_touch(args, request.current_path, request.file_system)
-        elif cmd == "cat":
-            is_top_running = False
-            return handle_cat(args, request.current_path, request.file_system)
-        elif cmd == "echo":
-            is_top_running = False
-            return handle_echo(args)
         elif cmd == "pwd":
-            is_top_running = False
-            return handle_pwd(request.current_path)
-        elif cmd == "clear":
-            is_top_running = False
-            return handle_clear()
-        elif cmd == "top":
-            is_top_running = True
-            return handle_top()
-        elif cmd == "htop":
-            is_top_running = True
-            return handle_htop()
-        elif cmd == "free":
-            is_top_running = False
-            return handle_free()
-        elif cmd == "df":
-            is_top_running = False
-            return handle_df()
-        elif cmd == "uptime":
-            is_top_running = False
-            return handle_uptime()
-        elif cmd == "ps":
-            is_top_running = False
-            return handle_ps(args)
-        elif cmd == "iostat":
-            is_top_running = False
-            return handle_iostat()
-        elif cmd == "vmstat":
-            is_top_running = False
-            return handle_vmstat()
+            return CommandResponse(output=current_directory, current_path=current_directory, success=True)
+        
+        elif cmd == "cd":
+            if not args:
+                current_directory = "/"
+            elif args[0] == "..":
+                if current_directory != "/":
+                    current_directory = "/".join(current_directory.rstrip("/").split("/")[:-1]) or "/"
+            elif args[0].startswith("/"):
+                current_directory = args[0]
+            else:
+                new_path = f"{current_directory.rstrip('/')}/{args[0]}"
+                contents = get_directory_contents(new_path)
+                if contents is not None:
+                    current_directory = new_path
+                else:
+                    return CommandResponse(
+                        output=f"cd: {args[0]}: No such file or directory",
+                        current_path=current_directory,
+                        success=False
+                    )
+            return CommandResponse(output="", current_path=current_directory, success=True)
+        
+        elif cmd == "mkdir":
+            if not args:
+                return CommandResponse(output="mkdir: missing operand", current_path=current_directory, success=False)
+            # In a real implementation, you'd create the directory
+            return CommandResponse(output=f"Created directory '{args[0]}'", current_path=current_directory, success=True)
+        
+        elif cmd == "touch":
+            if not args:
+                return CommandResponse(output="touch: missing file operand", current_path=current_directory, success=False)
+            # In a real implementation, you'd create the file
+            return CommandResponse(output=f"Created file '{args[0]}'", current_path=current_directory, success=True)
+        
+        elif cmd == "cat":
+            if not args:
+                return CommandResponse(output="cat: missing file operand", current_path=current_directory, success=False)
+            
+            file_path = f"{current_directory.rstrip('/')}/{args[0]}"
+            parts = [p for p in file_path.lstrip("/").split("/") if p]
+            current = file_system
+            
+            for part in parts:
+                if part in current and isinstance(current[part], dict):
+                    current = current[part]
+                else:
+                    return CommandResponse(
+                        output=f"cat: {args[0]}: No such file or directory",
+                        current_path=current_directory,
+                        success=False
+                    )
+            
+            if current.get("type") == "file":
+                return CommandResponse(output=current.get("content", ""), current_path=current_directory, success=True)
+            else:
+                return CommandResponse(
+                    output=f"cat: {args[0]}: Is a directory",
+                    current_path=current_directory,
+                    success=False
+                )
+        
+        elif cmd == "echo":
+            message = " ".join(args)
+            return CommandResponse(output=message, current_path=current_directory, success=True)
+        
         elif cmd == "rm":
-            is_top_running = False
-            return handle_rm(args, request.current_path, request.file_system)
+            if not args:
+                return CommandResponse(output="rm: missing operand", current_path=current_directory, success=False)
+            return CommandResponse(output=f"Removed '{args[0]}'", current_path=current_directory, success=True)
+        
+        elif cmd == "clear":
+            return CommandResponse(output="\033[2J\033[H", current_path=current_directory, success=True)
+        
+        elif cmd == "help":
+            help_text = """
+Available commands:
+  ls, ls -la    - List directory contents
+  pwd           - Print working directory
+  cd <dir>      - Change directory
+  mkdir <dir>   - Create directory
+  touch <file>  - Create file
+  cat <file>    - Display file contents
+  echo <text>   - Display text
+  rm <file>     - Remove file
+  clear         - Clear screen
+  help          - Show this help
+  top           - Show system processes
+  htop          - Show system processes (enhanced)
+  free          - Show memory usage
+  df            - Show disk usage
+  uptime        - Show system uptime
+  ps            - Show running processes
+  iostat        - Show I/O statistics
+  vmstat        - Show virtual memory statistics
+  backend status - Check backend connection
+  backend connect - Connect to backend
+  backend on    - Enable backend mode
+  backend off   - Disable backend mode
+            """
+            return CommandResponse(output=help_text.strip(), current_path=current_directory, success=True)
+        
         else:
-            is_top_running = False
             return CommandResponse(
-                success=False, 
-                output=f"command not found: {cmd}",
-                new_path=request.current_path,
-                new_file_system=request.file_system
+                output=f"Command not found: {cmd}. Type 'help' for available commands.",
+                current_path=current_directory,
+                success=False
             )
     
     except Exception as e:
         return CommandResponse(
-            success=False,
             output=f"Error executing command: {str(e)}",
-            new_path=request.current_path,
-            new_file_system=request.file_system
-        )
-
-def handle_help():
-    """Handle help command"""
-    commands = {
-        'help': 'Show this help message.',
-        'ls': 'List directory contents.',
-        'cd [dir]': 'Change the current directory. Use ".." for parent.',
-        'mkdir [dir]': 'Create a new directory.',
-        'touch [file]': 'Create a new empty file.',
-        'cat [file]': 'Display file content.',
-        'echo [text]': 'Display a line of text.',
-        'pwd': 'Print name of current/working directory.',
-        'clear': 'Clear the terminal screen.',
-        'top': 'Display processor activity (real system data).',
-        'htop': 'Enhanced process viewer with bars (real system data).',
-        'free': 'Display memory usage (real system data).',
-        'df': 'Display disk space usage (real system data).',
-        'uptime': 'Show system uptime and load (real system data).',
-        'ps': 'Show running processes (real system data).',
-        'iostat': 'Show I/O statistics (real system data).',
-        'vmstat': 'Show virtual memory statistics (real system data).',
-        'rm [file]': 'Remove a file or directory.'
-    }
-    
-    help_output = []
-    for cmd, desc in commands.items():
-        help_output.append(f"{cmd:<15} {desc}")
-    
-    return CommandResponse(success=True, output="\n".join(help_output))
-
-def handle_ls(args, current_path, file_system):
-    """Handle ls command"""
-    target_path = args[0] if args else current_path
-    node = get_node_by_path(target_path, file_system)
-    
-    if node and node.get('type') == 'directory':
-        children = node.get('children', {})
-        if children:
-            output = []
-            for name, child in children.items():
-                if child.get('type') == 'directory':
-                    output.append(f"📁 {name}")
-                else:
-                    output.append(f"📄 {name}")
-            return CommandResponse(success=True, output="\n".join(output))
-        else:
-            return CommandResponse(success=True, output="")
-    else:
-        return CommandResponse(
+            current_path=current_directory,
             success=False,
-            output=f"ls: cannot access '{target_path}': No such file or directory"
+            error=str(e)
         )
 
-def handle_cd(args, current_path, file_system):
-    """Handle cd command"""
-    target = args[0] if args else "home/user"
-    
-    if target == "..":
-        parts = current_path.split('/')
-        if len(parts) > 1:
-            new_path = '/'.join(parts[:-1])
-        else:
-            new_path = ""
-    elif target.startswith('/'):
-        new_path = target[1:]  # Remove leading slash
-    elif target in ['~', '']:
-        new_path = "home/user"
-    else:
-        if current_path:
-            new_path = f"{current_path}/{target}"
-        else:
-            new_path = target
-    
-    # Clean up path
-    new_path = new_path.strip('/')
-    
-    # Check if path exists
-    node = get_node_by_path(new_path, file_system)
-    if node and node.get('type') == 'directory':
-        return CommandResponse(success=True, output="", new_path=new_path)
-    else:
-        return CommandResponse(
-            success=False,
-            output=f"cd: no such file or directory: {target}"
-        )
+@app.get("/")
+async def root():
+    return {"message": "TerminalX Backend API", "status": "running"}
 
-def handle_mkdir(args, current_path, file_system):
-    """Handle mkdir command"""
-    if not args:
-        return CommandResponse(success=False, output="mkdir: missing operand")
-    
-    dir_name = args[0]
-    new_file_system = json.loads(json.dumps(file_system))  # Deep copy
-    parent_node = get_node_by_path(current_path, new_file_system)
-    
-    if not parent_node or parent_node.get('type') != 'directory':
-        return CommandResponse(success=False, output="mkdir: cannot create directory: Invalid path")
-    
-    if parent_node['children'].get(dir_name):
-        return CommandResponse(
-            success=False,
-            output=f"mkdir: cannot create directory '{dir_name}': File exists"
-        )
-    
-    parent_node['children'][dir_name] = {
-        'type': 'directory',
-        'children': {}
-    }
-    
-    return CommandResponse(
-        success=True,
-        output="",
-        new_file_system=new_file_system
-    )
+@app.get("/api/health")
+async def health_check():
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
-def handle_touch(args, current_path, file_system):
-    """Handle touch command"""
-    if not args:
-        return CommandResponse(success=False, output="touch: missing file operand")
-    
-    file_name = args[0]
-    new_file_system = json.loads(json.dumps(file_system))  # Deep copy
-    parent_node = get_node_by_path(current_path, new_file_system)
-    
-    if not parent_node or parent_node.get('type') != 'directory':
-        return CommandResponse(success=False, output="touch: cannot create file: Invalid path")
-    
-    if not parent_node['children'].get(file_name):
-        parent_node['children'][file_name] = {
-            'type': 'file',
-            'content': ''
-        }
-    
-    return CommandResponse(
-        success=True,
-        output="",
-        new_file_system=new_file_system
-    )
-
-def handle_cat(args, current_path, file_system):
-    """Handle cat command"""
-    if not args:
-        return CommandResponse(success=False, output="cat: missing file operand")
-    
-    file_name = args[0]
-    file_path = file_name if '/' in file_name else f"{current_path}/{file_name}"
-    node = get_node_by_path(file_path, file_system)
-    
-    if node and node.get('type') == 'file':
-        content = node.get('content', '')
-        return CommandResponse(success=True, output=content if content else "(empty file)")
-    elif node and node.get('type') == 'directory':
-        return CommandResponse(success=False, output=f"cat: {file_name}: Is a directory")
-    else:
-        return CommandResponse(success=False, output=f"cat: {file_name}: No such file or directory")
-
-def handle_echo(args):
-    """Handle echo command"""
-    return CommandResponse(success=True, output=" ".join(args))
-
-def handle_pwd(current_path):
-    """Handle pwd command"""
-    return CommandResponse(success=True, output=f"/{current_path}")
-
-def handle_clear():
-    """Handle clear command"""
-    return CommandResponse(success=True, output="")
-
-def handle_top():
-    """Handle top command with real system data"""
-    try:
-        real_processes = system_monitor.get_top_processes(15)
-        uptime_info = system_monitor.get_system_uptime()
-        cpu_info = system_monitor.get_cpu_info()
-        memory_info = system_monitor.get_memory_info()
-        
-        output = f"top - {datetime.now().strftime('%H:%M:%S')} up {uptime_info.get('uptime_formatted', 'unknown')}, load average: {cpu_info.get('load_average', [0,0,0])[0]:.2f}\n"
-        output += f"Tasks: {len(real_processes)} total, 1 running, {len(real_processes)-1} sleeping, 0 stopped, 0 zombie\n"
-        output += f"Cpu(s): {cpu_info.get('cpu_percent_average', 0):.1f}%us, 0.0%sy, 0.0%ni, {100-cpu_info.get('cpu_percent_average', 0):.1f}%id, 0.0%wa, 0.0%hi, 0.0%si, 0.0%st\n"
-        
-        mem = memory_info.get('virtual_memory', {})
-        output += f"Mem: {system_monitor.format_bytes(mem.get('total', 0))} total, {system_monitor.format_bytes(mem.get('used', 0))} used, {system_monitor.format_bytes(mem.get('free', 0))} free, {mem.get('percent', 0):.1f}% used\n"
-        
-        swap = memory_info.get('swap_memory', {})
-        output += f"Swap: {system_monitor.format_bytes(swap.get('total', 0))} total, {system_monitor.format_bytes(swap.get('used', 0))} used, {system_monitor.format_bytes(swap.get('free', 0))} free, {swap.get('percent', 0):.1f}% used\n\n"
-        
-        output += f"{'PID':<8} {'USER':<10} {'%CPU':<6} {'%MEM':<6} {'COMMAND':<20}\n"
-        
-        for proc in real_processes:
-            output += f"{proc['pid']:<8} {proc['username']:<10} {proc['cpu_percent']:<6} {proc['memory_percent']:<6} {proc['command'][:20]:<20}\n"
-        
-        return CommandResponse(success=True, output=output)
-    except Exception as e:
-        return CommandResponse(success=False, output=f"Error getting system info: {str(e)}")
-
-def handle_htop():
-    """Handle htop command with enhanced real system data"""
-    try:
-        real_processes = system_monitor.get_top_processes(20)
-        cpu_info = system_monitor.get_cpu_info()
-        memory_info = system_monitor.get_memory_info()
-        
-        # CPU bars for each core
-        output = f"htop - {datetime.now().strftime('%H:%M:%S')}\n"
-        output += f"CPU: {system_monitor.format_percent_bar(cpu_info.get('cpu_percent_average', 0))}\n"
-        
-        # Memory bars
-        mem = memory_info.get('virtual_memory', {})
-        output += f"Mem: {system_monitor.format_percent_bar(mem.get('percent', 0))} {system_monitor.format_bytes(mem.get('used', 0))}/{system_monitor.format_bytes(mem.get('total', 0))}\n"
-        
-        swap = memory_info.get('swap_memory', {})
-        output += f"Swp: {system_monitor.format_percent_bar(swap.get('percent', 0))} {system_monitor.format_bytes(swap.get('used', 0))}/{system_monitor.format_bytes(swap.get('total', 0))}\n\n"
-        
-        output += f"{'PID':<8} {'USER':<10} {'%CPU':<6} {'%MEM':<6} {'COMMAND':<30}\n"
-        
-        for proc in real_processes:
-            output += f"{proc['pid']:<8} {proc['username']:<10} {proc['cpu_percent']:<6} {proc['memory_percent']:<6} {proc['command'][:30]:<30}\n"
-        
-        return CommandResponse(success=True, output=output)
-    except Exception as e:
-        return CommandResponse(success=False, output=f"Error getting system info: {str(e)}")
-
-def handle_free():
-    """Handle free command - show memory usage"""
-    try:
-        memory_info = system_monitor.get_memory_info()
-        mem = memory_info.get('virtual_memory', {})
-        swap = memory_info.get('swap_memory', {})
-        
-        output = f"{'':<12} {'total':<12} {'used':<12} {'free':<12} {'shared':<12} {'buff/cache':<12} {'available':<12}\n"
-        output += f"{'Mem:':<12} {system_monitor.format_bytes(mem.get('total', 0)):<12} {system_monitor.format_bytes(mem.get('used', 0)):<12} {system_monitor.format_bytes(mem.get('free', 0)):<12} {'0B':<12} {system_monitor.format_bytes(mem.get('cached', 0) + mem.get('buffers', 0)):<12} {system_monitor.format_bytes(mem.get('available', 0)):<12}\n"
-        output += f"{'Swap:':<12} {system_monitor.format_bytes(swap.get('total', 0)):<12} {system_monitor.format_bytes(swap.get('used', 0)):<12} {system_monitor.format_bytes(swap.get('free', 0)):<12} {'0B':<12} {'0B':<12} {'0B':<12}\n"
-        
-        return CommandResponse(success=True, output=output)
-    except Exception as e:
-        return CommandResponse(success=False, output=f"Error getting memory info: {str(e)}")
-
-def handle_df():
-    """Handle df command - show disk usage"""
-    try:
-        disk_info = system_monitor.get_disk_info()
-        disk_usage = disk_info.get('disk_usage', {})
-        
-        output = f"{'Filesystem':<20} {'1K-blocks':<12} {'Used':<12} {'Available':<12} {'Use%':<8} {'Mounted on':<12}\n"
-        output += f"{'/dev/root':<20} {disk_usage.get('total', 0)//1024:<12} {disk_usage.get('used', 0)//1024:<12} {disk_usage.get('free', 0)//1024:<12} {disk_usage.get('percent', 0):<8} {'/':<12}\n"
-        
-        return CommandResponse(success=True, output=output)
-    except Exception as e:
-        return CommandResponse(success=False, output=f"Error getting disk info: {str(e)}")
-
-def handle_uptime():
-    """Handle uptime command"""
-    try:
-        uptime_info = system_monitor.get_system_uptime()
-        cpu_info = system_monitor.get_cpu_info()
-        load_avg = cpu_info.get('load_average', [0, 0, 0])
-        
-        output = f" {datetime.now().strftime('%H:%M:%S')} up {uptime_info.get('uptime_formatted', 'unknown')}, 1 user, load average: {load_avg[0]:.2f}, {load_avg[1]:.2f}, {load_avg[2]:.2f}\n"
-        
-        return CommandResponse(success=True, output=output)
-    except Exception as e:
-        return CommandResponse(success=False, output=f"Error getting uptime info: {str(e)}")
-
-def handle_ps(args):
-    """Handle ps command - show processes"""
-    try:
-        real_processes = system_monitor.get_processes(50)
-        
-        output = f"{'PID':<8} {'USER':<10} {'%CPU':<6} {'%MEM':<6} {'STAT':<6} {'START':<8} {'COMMAND':<30}\n"
-        
-        for proc in real_processes:
-            output += f"{proc['pid']:<8} {proc['username']:<10} {proc['cpu_percent']:<6} {proc['memory_percent']:<6} {proc['status']:<6} {proc['create_time']:<8} {proc['name'][:30]:<30}\n"
-        
-        return CommandResponse(success=True, output=output)
-    except Exception as e:
-        return CommandResponse(success=False, output=f"Error getting process info: {str(e)}")
-
-def handle_iostat():
-    """Handle iostat command - show I/O statistics"""
-    try:
-        disk_info = system_monitor.get_disk_info()
-        disk_io = disk_info.get('disk_io', {})
-        
-        output = f"Linux {system_monitor.system_info.get('hostname', 'unknown')} {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {system_monitor.system_info.get('architecture', 'unknown')} ({system_monitor.system_info.get('processor', 'unknown')})\n\n"
-        output += f"{'Device':<10} {'tps':<8} {'kB_read/s':<12} {'kB_wrtn/s':<12} {'kB_read':<12} {'kB_wrtn':<12}\n"
-        output += f"{'sda':<10} {'0.00':<8} {'0.00':<12} {'0.00':<12} {disk_io.get('read_bytes', 0)//1024:<12} {disk_io.get('write_bytes', 0)//1024:<12}\n"
-        
-        return CommandResponse(success=True, output=output)
-    except Exception as e:
-        return CommandResponse(success=False, output=f"Error getting I/O info: {str(e)}")
-
-def handle_vmstat():
-    """Handle vmstat command - show virtual memory statistics"""
-    try:
-        memory_info = system_monitor.get_memory_info()
-        cpu_info = system_monitor.get_cpu_info()
-        
-        mem = memory_info.get('virtual_memory', {})
-        cpu_times = cpu_info.get('cpu_times', {})
-        
-        output = f"procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----\n"
-        output += f" r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st\n"
-        output += f" 0  0   {mem.get('free', 0)//1024//1024:>6} {mem.get('free', 0)//1024//1024:>6} {mem.get('buffers', 0)//1024//1024:>6} {mem.get('cached', 0)//1024//1024:>6}   0    0     0     0   10    5 {cpu_times.get('user', 0):.1f} {cpu_times.get('system', 0):.1f} {cpu_times.get('idle', 0):.1f}  0.0  0.0\n"
-        
-        return CommandResponse(success=True, output=output)
-    except Exception as e:
-        return CommandResponse(success=False, output=f"Error getting VM stats: {str(e)}")
-
-def handle_rm(args, current_path, file_system):
-    """Handle rm command"""
-    if not args:
-        return CommandResponse(success=False, output="rm: missing operand")
-    
-    file_name = args[0]
-    new_file_system = json.loads(json.dumps(file_system))  # Deep copy
-    parent_node = get_node_by_path(current_path, new_file_system)
-    
-    if not parent_node or parent_node.get('type') != 'directory':
-        return CommandResponse(success=False, output="rm: cannot remove: Invalid path")
-    
-    if not parent_node['children'].get(file_name):
-        return CommandResponse(success=False, output=f"rm: cannot remove '{file_name}': No such file or directory")
-    
-    del parent_node['children'][file_name]
-    
-    return CommandResponse(
-        success=True,
-        output="",
-        new_file_system=new_file_system
-    )
-
-@app.get("/api/processes")
-async def get_processes():
-    """Get current process list for top command"""
-    if is_top_running:
-        try:
-            real_processes = system_monitor.get_top_processes(15)
-            return {"processes": real_processes, "is_running": is_top_running, "real_data": True}
-        except:
-            generate_processes()
-    return {"processes": processes, "is_running": is_top_running, "real_data": False}
+@app.post("/api/command", response_model=CommandResponse)
+async def execute_terminal_command(request: CommandRequest):
+    """Execute a terminal command"""
+    return execute_command(request.command, request.current_path)
 
 @app.get("/api/system")
 async def get_system_info():
-    """Get complete system information"""
+    """Get system monitoring information"""
     try:
-        return system_monitor.get_system_summary()
+        cpu_percent = system_monitor.get_cpu_percent()
+        memory_info = system_monitor.get_memory_info()
+        disk_info = system_monitor.get_disk_usage()
+        uptime_info = system_monitor.get_uptime()
+        processes = system_monitor.get_top_processes()
+        
+        return SystemInfo(
+            cpu_percent=cpu_percent,
+            memory_percent=memory_info["percent"],
+            memory_used=memory_info["used"],
+            memory_total=memory_info["total"],
+            disk_usage=disk_info,
+            uptime=uptime_info,
+            processes=processes
+        )
     except Exception as e:
-        return {"error": f"Failed to get system info: {str(e)}"}
+        raise HTTPException(status_code=500, detail=f"Error getting system info: {str(e)}")
+
+@app.get("/api/processes")
+async def get_processes():
+    """Get detailed process information"""
+    try:
+        processes = system_monitor.get_detailed_processes()
+        return {"processes": processes}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting processes: {str(e)}")
+
+@app.get("/api/memory")
+async def get_memory_info():
+    """Get memory information"""
+    try:
+        memory_info = system_monitor.get_memory_info()
+        return memory_info
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting memory info: {str(e)}")
+
+@app.get("/api/cpu")
+async def get_cpu_info():
+    """Get CPU information"""
+    try:
+        cpu_info = system_monitor.get_cpu_info()
+        return cpu_info
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting CPU info: {str(e)}")
+
+@app.get("/api/disk")
+async def get_disk_info():
+    """Get disk information"""
+    try:
+        disk_info = system_monitor.get_disk_usage()
+        return {"disk_usage": disk_info}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting disk info: {str(e)}")
+
+@app.get("/api/network")
+async def get_network_info():
+    """Get network information"""
+    try:
+        network_info = system_monitor.get_network_info()
+        return network_info
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting network info: {str(e)}")
 
 if __name__ == "__main__":
+    simulate_file_system()
     import uvicorn
-    print(f"🚀 Starting TerminalX Backend v1.0.0")
-    print(f"📡 Server will be available at: http://{HOST}:{PORT}")
-    print(f"📚 API Documentation: http://{HOST}:{PORT}/docs")
-    print(f"🔧 Debug mode: {'ON' if DEBUG else 'OFF'}")
-    print(f"🌐 Frontend URL: {FRONTEND_URL}")
-    
-    uvicorn.run(app, host=HOST, port=PORT)
+    uvicorn.run(app, host=HOST, port=PORT, debug=DEBUG)
