@@ -13,9 +13,6 @@ It provides an interactive terminal experience along with **real-time system mon
 - **Interactive Terminal**
   - Command history and auto-completion
   - Clear error handling and graceful fallback
-- **Natural Language Commands**
-  - Convert plain English into real terminal commands  
-  - Example: `"create a folder named test"` → `mkdir test`
 - **Backend Integration**
   - Automatic backend detection with status check and reconnection
 - **Cross-Platform**
