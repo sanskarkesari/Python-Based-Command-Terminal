@@ -4,8 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Folder, FileText, Server, Wifi, WifiOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-// Backend API configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Backend API configuration - remove trailing slash to prevent double slashes
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 
 // Initial file system structure
 const initialFileSystem = {
@@ -52,35 +52,115 @@ const parseNaturalLanguage = (command) => {
     return translated;
   }
 
-  // show me the contents of {name} -> cat {name}
-  match = trimmedCommand.match(/^show me the contents of (.+)/i);
-  if (match && match[1]) {
-    const translated = `cat ${match[1]}`;
-    console.log(`NL Parser: Matched 'show contents'. Original: "${command}", Translated: "${translated}"`);
+  // show files -> ls
+  match = trimmedCommand.match(/^show files/i);
+  if (match) {
+    const translated = `ls`;
+    console.log(`NL Parser: Matched 'show files'. Original: "${command}", Translated: "${translated}"`);
     return translated;
   }
 
-  // No match, return original command
+  // list files -> ls
+  match = trimmedCommand.match(/^list files/i);
+  if (match) {
+    const translated = `ls`;
+    console.log(`NL Parser: Matched 'list files'. Original: "${command}", Translated: "${translated}"`);
+    return translated;
+  }
+
+  // where am i -> pwd
+  match = trimmedCommand.match(/^where am i/i);
+  if (match) {
+    const translated = `pwd`;
+    console.log(`NL Parser: Matched 'where am i'. Original: "${command}", Translated: "${translated}"`);
+    return translated;
+  }
+
+  // go to folder {name} -> cd {name}
+  match = trimmedCommand.match(/^go to folder (.+)/i);
+  if (match && match[1]) {
+    const translated = `cd ${match[1]}`;
+    console.log(`NL Parser: Matched 'go to folder'. Original: "${command}", Translated: "${translated}"`);
+    return translated;
+  }
+
+  // open file {name} -> cat {name}
+  match = trimmedCommand.match(/^open file (.+)/i);
+  if (match && match[1]) {
+    const translated = `cat ${match[1]}`;
+    console.log(`NL Parser: Matched 'open file'. Original: "${command}", Translated: "${translated}"`);
+    return translated;
+  }
+
+  // read file {name} -> cat {name}
+  match = trimmedCommand.match(/^read file (.+)/i);
+  if (match && match[1]) {
+    const translated = `cat ${match[1]}`;
+    console.log(`NL Parser: Matched 'read file'. Original: "${command}", Translated: "${translated}"`);
+    return translated;
+  }
+
+  // clear screen -> clear
+  match = trimmedCommand.match(/^clear screen/i);
+  if (match) {
+    const translated = `clear`;
+    console.log(`NL Parser: Matched 'clear screen'. Original: "${command}", Translated: "${translated}"`);
+    return translated;
+  }
+
+  // show system info -> top
+  match = trimmedCommand.match(/^show system info/i);
+  if (match) {
+    const translated = `top`;
+    console.log(`NL Parser: Matched 'show system info'. Original: "${command}", Translated: "${translated}"`);
+    return translated;
+  }
+
+  // show memory usage -> free
+  match = trimmedCommand.match(/^show memory usage/i);
+  if (match) {
+    const translated = `free`;
+    console.log(`NL Parser: Matched 'show memory usage'. Original: "${command}", Translated: "${translated}"`);
+    return translated;
+  }
+
+  // show disk usage -> df
+  match = trimmedCommand.match(/^show disk usage/i);
+  if (match) {
+    const translated = `df`;
+    console.log(`NL Parser: Matched 'show disk usage'. Original: "${command}", Translated: "${translated}"`);
+    return translated;
+  }
+
+  // show uptime -> uptime
+  match = trimmedCommand.match(/^show uptime/i);
+  if (match) {
+    const translated = `uptime`;
+    console.log(`NL Parser: Matched 'show uptime'. Original: "${command}", Translated: "${translated}"`);
+    return translated;
+  }
+
+  // show processes -> ps
+  match = trimmedCommand.match(/^show processes/i);
+  if (match) {
+    const translated = `ps`;
+    console.log(`NL Parser: Matched 'show processes'. Original: "${command}", Translated: "${translated}"`);
+    return translated;
+  }
+
+  // No match found, return original command
   return command;
 };
 
-export default function TerminalPage() {
-  const [fileSystem, setFileSystem] = useState(initialFileSystem);
+export default function Terminal() {
+  const [command, setCommand] = useState('');
   const [history, setHistory] = useState([]);
-  const [currentPath, setCurrentPath] = useState('home/user');
-  const [input, setInput] = useState('');
-  const [commandHistory, setCommandHistory] = useState([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const [isTopRunning, setIsTopRunning] = useState(false);
-  const [processes, setProcesses] = useState([]);
+  const [currentPath, setCurrentPath] = useState('/home/user');
+  const [fileSystem, setFileSystem] = useState(initialFileSystem);
   const [isBackendConnected, setIsBackendConnected] = useState(false);
   const [backendStatus, setBackendStatus] = useState('checking');
-  const [useBackend, setUseBackend] = useState(true);
-
   const terminalRef = useRef(null);
-  const inputRef = useRef(null);
 
-  // Check backend connection on component mount
   useEffect(() => {
     checkBackendConnection();
   }, []);
@@ -104,88 +184,13 @@ export default function TerminalPage() {
       }
     } catch (error) {
       setIsBackendConnected(false);
-      setBackendStatus('disconnected');
+      setBackendStatus('error');
       console.log('❌ Backend connection failed:', error.message);
     }
   };
 
-  // Helper function to get a node by path from a given file system
-  const getNodeByPath = (path, fs = fileSystem) => {
-    const parts = path.split('/').filter(Boolean);
-    let currentNode = fs;
-    for (const part of parts) {
-      if (currentNode && currentNode.type === 'directory' && currentNode.children && currentNode.children[part]) {
-        currentNode = currentNode.children[part];
-      } else if (currentNode && typeof currentNode === 'object' && !currentNode.type && currentNode[part]) { // Handle root
-        currentNode = currentNode[part];
-      } else {
-        return null; // Path not found
-      }
-    }
-    return currentNode;
-  };
-
-  // Effect to scroll to bottom on history change
-  useEffect(() => {
-    if (terminalRef.current && !isTopRunning) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-    }
-    console.log("History updated, scrolled to bottom if not in 'top' view.");
-  }, [history, isTopRunning]);
-
-  // Effect for initial welcome message and input focus
-  useEffect(() => {
-    const welcomeNode = getNodeByPath('home/user/welcome.txt');
-    if (welcomeNode && welcomeNode.type === 'file') {
-      let welcomeMessage = welcomeNode.content;
-      if (isBackendConnected) {
-        welcomeMessage += '\n\n🔗 Backend connected - Real system monitoring available!';
-        welcomeMessage += '\nTry: top, htop, free, df, uptime, ps, iostat, vmstat';
-      } else {
-        welcomeMessage += '\n\n⚠️  Backend disconnected - Using local simulation only';
-        welcomeMessage += '\nStart backend: cd backend && python run.py';
-      }
-      setHistory([{ type: 'output', content: welcomeMessage }]);
-    }
-    inputRef.current?.focus();
-    console.log("Component mounted, welcome message displayed.");
-  }, [isBackendConnected]);
-
-  // Effect for process simulation when 'top' is running (fallback for local mode)
-  useEffect(() => {
-    let intervalId = null;
-
-    const generateProcesses = () => {
-      const commands = ['/bin/bash', 'code', 'chrome', 'node', 'docker', 'figma_agent', 'spotify', 'slack', 'kernel_task'];
-      const users = ['root', 'user', 'system', 'windowserver'];
-      const newProcesses = Array.from({ length: Math.floor(Math.random() * 6) + 5 }, (_, i) => ({
-        pid: Math.floor(Math.random() * 90000) + 10000,
-        user: users[Math.floor(Math.random() * users.length)],
-        cpu: (Math.random() * 25).toFixed(1),
-        mem: (Math.random() * 5).toFixed(1),
-        command: commands[Math.floor(Math.random() * commands.length)],
-      }));
-      setProcesses(newProcesses);
-      console.log("Generated new processes for 'top' command (local simulation).");
-    };
-
-    if (isTopRunning && !useBackend) {
-      console.log("'top' command is running. Starting local process simulation.");
-      generateProcesses(); // Run once immediately to populate
-      intervalId = setInterval(generateProcesses, 2500);
-    }
-
-    // Cleanup function to stop the interval
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-        console.log("Stopped 'top' command simulation.");
-      }
-    };
-  }, [isTopRunning, useBackend]);
-
-  // Call backend API for command execution
-  const executeBackendCommand = async (command, currentPath, fileSystem) => {
+  // Execute command via backend API
+  const executeBackendCommand = async (cmd, path) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/command`, {
         method: 'POST',
@@ -193,9 +198,8 @@ export default function TerminalPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          command: command,
-          current_path: currentPath,
-          file_system: fileSystem
+          command: cmd,
+          current_path: path
         })
       });
 
@@ -203,472 +207,435 @@ export default function TerminalPage() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const result = await response.json();
-      return result;
+      const data = await response.json();
+      return data;
     } catch (error) {
-      console.error('Backend API error:', error);
+      console.error('Backend command error:', error);
       throw error;
     }
   };
 
-  // Get real-time processes from backend
-  const getBackendProcesses = async () => {
+  // Get system monitoring data from backend
+  const getSystemData = async (command) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/processes`);
-      if (response.ok) {
-        const data = await response.json();
-        return data.processes || [];
+      let endpoint = '';
+      switch (command) {
+        case 'top':
+        case 'htop':
+          endpoint = '/api/system';
+          break;
+        case 'free':
+          endpoint = '/api/memory';
+          break;
+        case 'df':
+          endpoint = '/api/disk';
+          break;
+        case 'uptime':
+          endpoint = '/api/system';
+          break;
+        case 'ps':
+          endpoint = '/api/processes';
+          break;
+        case 'iostat':
+        case 'vmstat':
+          endpoint = '/api/system';
+          break;
+        default:
+          return null;
+      }
+
+      const response = await fetch(`${API_BASE_URL}${endpoint}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('System data error:', error);
+      throw error;
+    }
+  };
+
+  // Simulate system monitoring commands locally
+  const simulateSystemCommand = (command) => {
+    const now = new Date();
+    const timestamp = now.toLocaleTimeString();
+    
+    switch (command) {
+      case 'top':
+      case 'htop':
+        return `top - ${timestamp}
+  PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+ 1234 user      20   0   12345   6789   1234 S   5.2   2.1   0:01.23 node
+ 5678 user      20   0    9876   5432   2109 S   3.1   1.7   0:00.87 python
+ 9012 user      20   0    7654   3210   1098 S   1.8   1.0   0:00.45 chrome
+ 3456 user      20   0    5432   2109    987 S   0.9   0.6   0:00.23 firefox`;
+
+      case 'free':
+        return `              total        used        free      shared  buff/cache   available
+Mem:        8192000     4567890     1234567      234567      2389543     3456789
+Swap:       2097152      123456     1973696`;
+
+      case 'df':
+        return `Filesystem     1K-blocks     Used Available Use% Mounted on
+/dev/sda1      52428800  12345678  40083122  24% /
+/dev/sda2     104857600  45678901  59178699  44% /home
+tmpfs           4096000      1234   4094766   1% /tmp`;
+
+      case 'uptime':
+        const uptime = Math.floor(Math.random() * 86400) + 3600; // 1-24 hours
+        const hours = Math.floor(uptime / 3600);
+        const minutes = Math.floor((uptime % 3600) / 60);
+        return ` ${timestamp} up ${hours}:${minutes.toString().padStart(2, '0')},  2 users,  load average: 0.15, 0.12, 0.08`;
+
+      case 'ps':
+        return `  PID TTY          TIME CMD
+ 1234 pts/0    00:00:01 bash
+ 5678 pts/0    00:00:00 node
+ 9012 pts/0    00:00:00 python
+ 3456 pts/0    00:00:00 chrome`;
+
+      case 'iostat':
+        return `Linux 5.4.0-42-generic (hostname)    ${now.toDateString()}
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+           5.23    0.00    2.15    0.45    0.00   92.17
+
+Device             tps    kB_read/s    kB_wrtn/s    kB_read    kB_wrtn
+sda               1.23        45.67        23.45    1234567     654321
+sdb               0.12         2.34         1.23      23456      12345`;
+
+      case 'vmstat':
+        return `procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+ 1  0  12345 1234567 234567 4567890   0    0    12    34  123  456  5  2 92  1  0`;
+
+      default:
+        return `Command '${command}' not found in simulation mode.`;
+    }
+  };
+
+  // Execute command
+  const executeCommand = async (cmd) => {
+    const trimmedCmd = cmd.trim();
+    if (!trimmedCmd) return;
+
+    // Parse natural language commands
+    const parsedCommand = parseNaturalLanguage(trimmedCmd);
+    console.log(`Executing command: "${parsedCommand}" (original: "${trimmedCmd}")`);
+
+    // Handle backend management commands
+    if (parsedCommand === 'backend status') {
+      const status = isBackendConnected ? 'Online' : 'Offline';
+      const statusIcon = isBackendConnected ? '🟢' : '🔴';
+      addToHistory(parsedCommand, `${statusIcon} Backend Status: ${status}\nAPI URL: ${API_BASE_URL}\nStatus: ${backendStatus}`);
+      return;
+    }
+
+    if (parsedCommand === 'backend connect') {
+      await checkBackendConnection();
+      const status = isBackendConnected ? 'Connected' : 'Failed to connect';
+      addToHistory(parsedCommand, `Backend connection: ${status}`);
+      return;
+    }
+
+    if (parsedCommand === 'backend on') {
+      setIsBackendConnected(true);
+      setBackendStatus('connected');
+      addToHistory(parsedCommand, 'Backend mode enabled');
+      return;
+    }
+
+    if (parsedCommand === 'backend off') {
+      setIsBackendConnected(false);
+      setBackendStatus('offline');
+      addToHistory(parsedCommand, 'Backend mode disabled');
+      return;
+    }
+
+    let output = '';
+    let newPath = currentPath;
+    let success = true;
+
+    try {
+      // Try backend first if connected
+      if (isBackendConnected) {
+        try {
+          // Check if it's a system monitoring command
+          if (['top', 'htop', 'free', 'df', 'uptime', 'ps', 'iostat', 'vmstat'].includes(parsedCommand)) {
+            const systemData = await getSystemData(parsedCommand);
+            
+            if (systemData) {
+              // Format system data based on command
+              switch (parsedCommand) {
+                case 'top':
+                case 'htop':
+                  output = `top - ${new Date().toLocaleTimeString()}
+  PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND`;
+                  systemData.processes.slice(0, 10).forEach(proc => {
+                    output += `\n${proc.pid.toString().padStart(5)} ${proc.name.padEnd(8)} ${proc.cpu_percent.toFixed(1).padStart(6)} ${proc.memory_percent.toFixed(1).padStart(6)} ${proc.command}`;
+                  });
+                  break;
+                case 'free':
+                  output = `              total        used        free      shared  buff/cache   available
+Mem:        ${systemData.memory_total} ${systemData.memory_used} ${systemData.memory_total}      234567      2389543     ${systemData.memory_total}`;
+                  break;
+                case 'df':
+                  output = `Filesystem     1K-blocks     Used Available Use% Mounted on
+/dev/sda1      ${systemData.disk_usage}`;
+                  break;
+                case 'uptime':
+                  output = ` ${new Date().toLocaleTimeString()} up ${systemData.uptime},  2 users,  load average: 0.15, 0.12, 0.08`;
+                  break;
+                case 'ps':
+                  output = `  PID TTY          TIME CMD`;
+                  systemData.processes.slice(0, 10).forEach(proc => {
+                    output += `\n${proc.pid.toString().padStart(5)} pts/0    00:00:01 ${proc.name}`;
+                  });
+                  break;
+                case 'iostat':
+                case 'vmstat':
+                  output = `System monitoring data from backend:\nCPU: ${systemData.cpu_percent}%\nMemory: ${systemData.memory_percent}%\nUptime: ${systemData.uptime}`;
+                  break;
+              }
+            } else {
+              throw new Error('No system data received');
+            }
+          } else {
+            // Regular terminal command
+            const result = await executeBackendCommand(parsedCommand, currentPath);
+            output = result.output;
+            newPath = result.current_path;
+            success = result.success;
+          }
+        } catch (backendError) {
+          console.log('Backend command failed, falling back to local simulation:', backendError.message);
+          // Fall back to local simulation
+          if (['top', 'htop', 'free', 'df', 'uptime', 'ps', 'iostat', 'vmstat'].includes(parsedCommand)) {
+            output = simulateSystemCommand(parsedCommand);
+          } else {
+            output = await simulateCommand(parsedCommand);
+            newPath = currentPath; // Local simulation doesn't change path
+          }
+        }
+      } else {
+        // Backend not connected, use local simulation
+        if (['top', 'htop', 'free', 'df', 'uptime', 'ps', 'iostat', 'vmstat'].includes(parsedCommand)) {
+          output = simulateSystemCommand(parsedCommand);
+        } else {
+          output = await simulateCommand(parsedCommand);
+          newPath = currentPath; // Local simulation doesn't change path
+        }
       }
     } catch (error) {
-      console.error('Error fetching processes:', error);
+      output = `Error: ${error.message}`;
+      success = false;
     }
-    return [];
+
+    addToHistory(parsedCommand, output);
+    setCurrentPath(newPath);
   };
 
-  const processCommand = async (originalCommand) => {
-    let command = parseNaturalLanguage(originalCommand);
-    const [cmd, ...args] = command.trim().split(/\s+/);
-    const newHistory = [...history, { type: 'input', command: originalCommand, path: currentPath }];
-    console.log(`Processing command: '${cmd}' with args:`, args);
+  // Add to history
+  const addToHistory = (cmd, output) => {
+    setHistory(prev => [...prev, { command: cmd, output, timestamp: new Date() }]);
+  };
 
-    // If backend is connected and we want to use it, try backend first
-    if (isBackendConnected && useBackend) {
-      try {
-        const result = await executeBackendCommand(command, currentPath, fileSystem);
-        
-        if (result.success) {
-          // Update file system if changed
-          if (result.new_file_system) {
-            setFileSystem(result.new_file_system);
-          }
-          
-          // Update current path if changed
-          if (result.new_path !== undefined) {
-            setCurrentPath(result.new_path);
-          }
-          
-          // Handle special commands
-          if (cmd === 'top' || cmd === 'htop') {
-            setIsTopRunning(true);
-            setHistory([]);
-            console.log(`Switched to '${cmd}' view with real system data.`);
-          } else {
-            setIsTopRunning(false);
-            setHistory([...newHistory, { type: 'output', content: result.output }]);
-          }
-          
-          return;
-        } else {
-          // Backend returned an error, show it
-          setIsTopRunning(false);
-          setHistory([...newHistory, { type: 'output', content: result.output || result.error || 'Unknown error' }]);
-          return;
-        }
-      } catch (error) {
-        console.error('Backend command failed, falling back to local:', error);
-        // Fall through to local processing
-      }
-    }
+  // Simulate command execution (local fallback)
+  const simulateCommand = async (cmd) => {
+    const parts = cmd.split(' ');
+    const command = parts[0];
+    const args = parts.slice(1);
 
-    // Local command processing (fallback)
-    console.log('Using local command processing');
-    switch (cmd) {
-      case 'help':
-        setIsTopRunning(false);
-        handleHelp(newHistory);
-        break;
+    switch (command) {
       case 'ls':
-        setIsTopRunning(false);
-        handleLs(args, newHistory);
-        break;
-      case 'cd':
-        setIsTopRunning(false);
-        handleCd(args, newHistory);
-        break;
-      case 'mkdir':
-        setIsTopRunning(false);
-        handleMkdir(args, newHistory);
-        break;
-      case 'touch':
-        setIsTopRunning(false);
-        handleTouch(args, newHistory);
-        break;
-      case 'cat':
-        setIsTopRunning(false);
-        handleCat(args, newHistory);
-        break;
-      case 'echo':
-        setIsTopRunning(false);
-        handleEcho(args, newHistory);
-        break;
+        if (args.includes('-la')) {
+          return `total 0
+drwxr-xr-x 2 user user 4096 Dec 25 12:00 .
+drwxr-xr-x 3 user user 4096 Dec 25 12:00 ..
+-rw-r--r-- 1 user user   50 Dec 25 12:00 welcome.txt
+drwxr-xr-x 2 user user 4096 Dec 25 12:00 projects`;
+        }
+        return 'welcome.txt projects';
+
       case 'pwd':
-        setIsTopRunning(false);
-        handlePwd(newHistory);
-        break;
-      case 'clear':
-        setIsTopRunning(false);
-        handleClear();
-        break;
-      case 'top':
-        setIsTopRunning(true);
-        setHistory([]);
-        console.log("Switched to 'top' view (local simulation).");
-        break;
-      case 'backend':
-        handleBackendCommand(args, newHistory);
-        break;
-      case '':
-        setIsTopRunning(false);
-        setHistory(newHistory);
-        break;
-      default:
-        setIsTopRunning(false);
-        setHistory([...newHistory, { type: 'output', content: `command not found: ${cmd}` }]);
-        break;
-    }
-  };
+        return currentPath;
 
-  const handleBackendCommand = (args, currentHistory) => {
-    if (args.length === 0) {
-      const status = isBackendConnected ? 'connected' : 'disconnected';
-      const message = `Backend Status: ${status}\nAPI URL: ${API_BASE_URL}\nUse Backend: ${useBackend ? 'yes' : 'no'}`;
-      setHistory([...currentHistory, { type: 'output', content: message }]);
-      return;
-    }
-
-    const subcommand = args[0];
-    switch (subcommand) {
-      case 'status':
-        const status = isBackendConnected ? 'connected' : 'disconnected';
-        setHistory([...currentHistory, { type: 'output', content: `Backend Status: ${status}` }]);
-        break;
-      case 'connect':
-        checkBackendConnection();
-        setHistory([...currentHistory, { type: 'output', content: 'Checking backend connection...' }]);
-        break;
-      case 'on':
-        setUseBackend(true);
-        setHistory([...currentHistory, { type: 'output', content: 'Backend mode enabled' }]);
-        break;
-      case 'off':
-        setUseBackend(false);
-        setHistory([...currentHistory, { type: 'output', content: 'Local mode enabled' }]);
-        break;
-      default:
-        setHistory([...currentHistory, { type: 'output', content: 'Usage: backend [status|connect|on|off]' }]);
-    }
-  };
-
-  const handleHelp = (currentHistory) => {
-    const commands = {
-      'help': 'Show this help message.',
-      'ls': 'List directory contents.',
-      'cd [dir]': 'Change the current directory. Use ".." for parent.',
-      'mkdir [dir]': 'Create a new directory.',
-      'touch [file]': 'Create a new empty file.',
-      'cat [file]': 'Display file content.',
-      'echo [text]': 'Display a line of text.',
-      'pwd': 'Print name of current/working directory.',
-      'clear': 'Clear the terminal screen.',
-      'top': 'Display processor activity (real system data if backend connected).',
-      'htop': 'Enhanced process viewer with bars (real system data if backend connected).',
-      'free': 'Display memory usage (real system data if backend connected).',
-      'df': 'Display disk space usage (real system data if backend connected).',
-      'uptime': 'Show system uptime and load (real system data if backend connected).',
-      'ps': 'Show running processes (real system data if backend connected).',
-      'iostat': 'Show I/O statistics (real system data if backend connected).',
-      'vmstat': 'Show virtual memory statistics (real system data if backend connected).',
-      'backend': 'Backend management commands (status, connect, on, off).',
-    };
-    
-    const helpContent = (
-      <div className="grid grid-cols-[120px_1fr] gap-x-4 gap-y-1">
-        {Object.entries(commands).map(([cmd, desc]) => (
-          <React.Fragment key={cmd}>
-            <span className="text-info">{cmd}</span>
-            <span>{desc}</span>
-          </React.Fragment>
-        ))}
-      </div>
-    );
-    setHistory([...currentHistory, { type: 'output', content: helpContent }]);
-  };
-
-  const handleLs = (args, currentHistory) => {
-    const path = args[0] || currentPath;
-    const node = getNodeByPath(path);
-    if (node && node.type === 'directory') {
-      const content = Object.keys(node.children).length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-          {Object.entries(node.children).map(([name, child]) => (
-            <div key={name} className="flex items-center gap-2">
-              {child.type === 'directory' ? <Folder className="w-4 h-4 text-blue-400 flex-shrink-0" /> : <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />}
-              <span className={child.type === 'directory' ? 'text-blue-400' : ''}>{name}</span>
-            </div>
-          ))}
-        </div>
-      ) : null;
-      setHistory([...currentHistory, { type: 'output', content }]);
-    } else {
-      setHistory([...currentHistory, { type: 'output', content: `ls: cannot access '${path}': No such file or directory` }]);
-    }
-  };
-
-  const handleCd = (args, currentHistory) => {
-    const target = args[0] || 'home/user';
-    
-    let newPath;
-    if (target === '..') {
-      const parts = currentPath.split('/').filter(Boolean);
-      parts.pop();
-      newPath = parts.join('/');
-    } else if (target.startsWith('/')) {
-      newPath = target.substring(1);
-    } else if (target === '~' || target === '') {
-      newPath = 'home/user';
-    } else {
-      newPath = currentPath ? `${currentPath}/${target}` : target;
-    }
-    
-    newPath = newPath.replace(/\/$/, '');
-
-    const node = getNodeByPath(newPath);
-    if (node && node.type === 'directory') {
-      setCurrentPath(newPath);
-      setHistory(currentHistory);
-      console.log("Path changed to:", newPath);
-    } else {
-      setHistory([...currentHistory, { type: 'output', content: `cd: no such file or directory: ${target}` }]);
-    }
-  };
-
-  const handleMkdir = (args, currentHistory) => {
-    const dirName = args[0];
-    if (!dirName) {
-      setHistory([...currentHistory, { type: 'output', content: 'mkdir: missing operand' }]);
-      return;
-    }
-
-    const newFs = JSON.parse(JSON.stringify(fileSystem));
-    const parentNode = getNodeByPath(currentPath, newFs);
-
-    if (parentNode.children[dirName]) {
-      setHistory([...currentHistory, { type: 'output', content: `mkdir: cannot create directory '${dirName}': File exists` }]);
-    } else {
-      parentNode.children[dirName] = { type: 'directory', children: {} };
-      setFileSystem(newFs);
-      setHistory(currentHistory);
-      console.log(`Directory '${dirName}' created at '${currentPath}'`);
-    }
-  };
-
-  const handleTouch = (args, currentHistory) => {
-    const fileName = args[0];
-    if (!fileName) {
-      setHistory([...currentHistory, { type: 'output', content: 'touch: missing file operand' }]);
-      return;
-    }
-
-    const newFs = JSON.parse(JSON.stringify(fileSystem));
-    const parentNode = getNodeByPath(currentPath, newFs);
-
-    if (parentNode.children[fileName]) {
-      setHistory(currentHistory); // In a real system, touch updates timestamps. Here we do nothing if it exists.
-    } else {
-      parentNode.children[fileName] = { type: 'file', content: '' };
-      setFileSystem(newFs);
-      setHistory(currentHistory);
-      console.log(`File '${fileName}' created at '${currentPath}'`);
-    }
-  };
-
-  const handleCat = (args, currentHistory) => {
-    const fileName = args[0];
-    if (!fileName) {
-      setHistory([...currentHistory, { type: 'output', content: 'cat: missing file operand' }]);
-      return;
-    }
-
-    const path = fileName.includes('/') ? fileName : `${currentPath}/${fileName}`;
-    const node = getNodeByPath(path);
-
-    if (node && node.type === 'file') {
-      setHistory([...currentHistory, { type: 'output', content: <pre className="whitespace-pre-wrap">{node.content || '(empty file)'}</pre> }]);
-    } else if (node && node.type === 'directory') {
-      setHistory([...currentHistory, { type: 'output', content: `cat: ${fileName}: Is a directory` }]);
-    } else {
-      setHistory([...currentHistory, { type: 'output', content: `cat: ${fileName}: No such file or directory` }]);
-    }
-  };
-
-  const handleEcho = (args, currentHistory) => {
-    const content = args.join(' ');
-    setHistory([...currentHistory, { type: 'output', content }]);
-  };
-
-  const handlePwd = (currentHistory) => {
-    setHistory([...currentHistory, { type: 'output', content: `/${currentPath}` }]);
-  };
-
-  const handleClear = () => {
-    setHistory([]);
-    console.log("Terminal cleared.");
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (commandHistory.length > 0) {
-        const newIndex = historyIndex === -1 ? commandHistory.length - 1 : Math.max(0, historyIndex - 1);
-        setHistoryIndex(newIndex);
-        setInput(commandHistory[newIndex]);
-        console.log(`Navigating history up. Index: ${newIndex}, Command: ${commandHistory[newIndex]}`);
-      }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (historyIndex !== -1) {
-        if (historyIndex < commandHistory.length - 1) {
-          const newIndex = historyIndex + 1;
-          setHistoryIndex(newIndex);
-          setInput(commandHistory[newIndex]);
-          console.log(`Navigating history down. Index: ${newIndex}, Command: ${commandHistory[newIndex]}`);
+      case 'cd':
+        if (args.length === 0) {
+          return 'Changed to home directory';
+        }
+        const targetPath = args[0];
+        if (targetPath === '..') {
+          return 'Changed to parent directory';
+        } else if (targetPath === '/') {
+          return 'Changed to root directory';
         } else {
-          setHistoryIndex(-1);
-          setInput('');
-          console.log("Navigated past last command, clearing input.");
+          return `Changed to directory: ${targetPath}`;
         }
-      }
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (input.trim()) {
-        setCommandHistory(prev => [...prev, input.trim()]);
-        console.log(`Command '${input.trim()}' added to history. New history length: ${commandHistory.length + 1}`);
-      }
-      processCommand(input);
-      setHistoryIndex(-1);
-      setInput('');
-    } else if (e.key === 'Tab') {
-        e.preventDefault();
-        const currentInput = input.trim();
-        if (!currentInput) return;
 
-        const commands = ['help', 'ls', 'cd', 'mkdir', 'touch', 'cat', 'echo', 'pwd', 'clear', 'top', 'htop', 'free', 'df', 'uptime', 'ps', 'iostat', 'vmstat', 'backend'];
-        
-        const currentNode = getNodeByPath(currentPath, fileSystem);
-        const children = currentNode && currentNode.type === 'directory' ? Object.keys(currentNode.children) : [];
-
-        const allSuggestions = [...commands, ...children];
-        const matches = allSuggestions.filter(s => s.startsWith(currentInput));
-
-        if (matches.length === 1) {
-            const match = matches[0];
-            const node = currentNode?.children?.[match];
-            const completedValue = node && node.type === 'directory' ? `${match}/` : match;
-            setInput(completedValue);
-            console.log(`Auto-completed to: ${completedValue}`);
-        } else if (matches.length > 1) {
-            const newHistory = [...history, { type: 'output', content: matches.join('  ') }];
-            setHistory(newHistory);
-            console.log(`Multiple suggestions found: ${matches.join(', ')}`);
+      case 'mkdir':
+        if (args.length === 0) {
+          return 'mkdir: missing operand';
         }
+        return `Created directory: ${args[0]}`;
+
+      case 'touch':
+        if (args.length === 0) {
+          return 'touch: missing file operand';
+        }
+        return `Created file: ${args[0]}`;
+
+      case 'cat':
+        if (args.length === 0) {
+          return 'cat: missing file operand';
+        }
+        if (args[0] === 'welcome.txt') {
+          return 'Welcome to TerminalX with Real System Monitoring! Type `help` to see available commands.';
+        }
+        return `cat: ${args[0]}: No such file or directory`;
+
+      case 'echo':
+        return args.join(' ');
+
+      case 'rm':
+        if (args.length === 0) {
+          return 'rm: missing operand';
+        }
+        return `Removed: ${args[0]}`;
+
+      case 'clear':
+        return '\033[2J\033[H';
+
+      case 'help':
+        return `Available commands:
+  ls, ls -la    - List directory contents
+  pwd           - Print working directory
+  cd <dir>      - Change directory
+  mkdir <dir>   - Create directory
+  touch <file>  - Create file
+  cat <file>    - Display file contents
+  echo <text>   - Display text
+  rm <file>     - Remove file
+  clear         - Clear screen
+  help          - Show this help
+  top           - Show system processes
+  htop          - Show system processes (enhanced)
+  free          - Show memory usage
+  df            - Show disk usage
+  uptime        - Show system uptime
+  ps            - Show running processes
+  iostat        - Show I/O statistics
+  vmstat        - Show virtual memory statistics
+  backend status - Check backend connection
+  backend connect - Connect to backend
+  backend on    - Enable backend mode
+  backend off   - Disable backend mode
+
+Natural Language Commands:
+  create a folder named <name>
+  make a file named <name>
+  delete file <name>
+  show files / list files
+  where am i
+  go to folder <name>
+  open file <name> / read file <name>
+  clear screen
+  show system info
+  show memory usage
+  show disk usage
+  show uptime
+  show processes`;
+
+      default:
+        return `Command not found: ${command}. Type 'help' for available commands.`;
     }
   };
 
-  const handleContainerClick = () => {
-    inputRef.current?.focus();
+  // Handle key press
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      executeCommand(command);
+      setCommand('');
+    }
   };
 
-  // Real-time process updates for top/htop commands
+  // Scroll to bottom
   useEffect(() => {
-    let intervalId = null;
-
-    if (isTopRunning && isBackendConnected && useBackend) {
-      const updateProcesses = async () => {
-        try {
-          const realProcesses = await getBackendProcesses();
-          if (realProcesses.length > 0) {
-            setProcesses(realProcesses);
-          }
-        } catch (error) {
-          console.error('Error updating processes:', error);
-        }
-      };
-
-      updateProcesses(); // Initial load
-      intervalId = setInterval(updateProcesses, 2000); // Update every 2 seconds
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [isTopRunning, isBackendConnected, useBackend]);
+  }, [history]);
 
   return (
-    <div
-      className="h-screen bg-base-300 text-base-content font-mono p-2 sm:p-4 overflow-hidden"
-      onClick={handleContainerClick}
-    >
-      {/* Backend Status Indicator */}
-      <div className="absolute top-2 right-2 z-10">
-        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs ${
-          isBackendConnected 
-            ? 'bg-success text-success-content' 
-            : 'bg-warning text-warning-content'
-        }`}>
-          {isBackendConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-          <span>{isBackendConnected ? 'Backend Connected' : 'Backend Offline'}</span>
+    <div className="min-h-screen bg-gray-900 text-green-400 font-mono">
+      {/* Header */}
+      <div className="bg-gray-800 border-b border-gray-700 px-4 py-2 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <Server className="w-5 h-5" />
+          <span className="text-lg font-bold">TerminalX</span>
+          <span className="text-sm text-gray-400">- Web Terminal with System Monitoring</span>
+        </div>
+        <div className="flex items-center space-x-2">
+          {isBackendConnected ? (
+            <div className="flex items-center space-x-1 text-green-400">
+              <Wifi className="w-4 h-4" />
+              <span className="text-sm">Backend Online</span>
+            </div>
+          ) : (
+            <div className="flex items-center space-x-1 text-red-400">
+              <WifiOff className="w-4 h-4" />
+              <span className="text-sm">Backend Offline</span>
+            </div>
+          )}
         </div>
       </div>
 
-      <div ref={terminalRef} className="mockup-code h-full overflow-y-auto text-sm sm:text-base">
-        {isTopRunning ? (
-          <div>
-            <pre className="text-success">top - {new Date().toLocaleTimeString()} | Tasks: {processes.length} running | {isBackendConnected && useBackend ? 'Real System Data' : 'Simulated Data'} | Press any key to quit.</pre>
-            <pre className="font-bold text-base-content/80">
-              {'PID'.padStart(8)} {'USER'.padEnd(10)} {'%CPU'.padStart(6)} {'%MEM'.padStart(6)} {'COMMAND'.padEnd(20)}
-            </pre>
-            {processes.map((p) => (
-              <pre key={p.pid} className="whitespace-pre">
-                {String(p.pid).padStart(8)} {p.user.padEnd(10)} {p.cpu.padStart(6)} {p.mem.padStart(6)} {p.command.padEnd(20)}
-              </pre>
-            ))}
+      {/* Terminal */}
+      <div 
+        ref={terminalRef}
+        className="h-screen overflow-y-auto p-4 space-y-2"
+      >
+        {/* Welcome message */}
+        <div className="text-green-400">
+          <div className="text-2xl font-bold mb-2">Welcome to TerminalX! 🚀</div>
+          <div className="text-sm text-gray-400 mb-4">
+            A modern web terminal with real system monitoring capabilities.
           </div>
-        ) : (
-          history.map((item, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              {item.type === 'input' ? (
-                <pre data-prefix="$" className="text-success">
-                  <span className="text-info">~/{item.path}</span>
-                  <span className="text-base-content/70"> {item.command}</span>
-                </pre>
-              ) : (
-                <pre data-prefix=">" className="text-warning whitespace-pre-wrap">{item.content}</pre>
-              )}
-            </motion.div>
-          ))
-        )}
-        <div className="flex items-center">
-          <pre data-prefix="$" className="text-success flex-shrink-0">
-            <span className="text-info">~/{currentPath}</span>
-          </pre>
+          <div className="text-sm text-gray-400 mb-4">
+            Backend Status: {isBackendConnected ? '🟢 Connected' : '🔴 Offline'} | 
+            API: {API_BASE_URL}
+          </div>
+        </div>
+
+        {/* Command history */}
+        {history.map((item, index) => (
+          <motion.div
+            key={index}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-1"
+          >
+            <div className="flex items-center space-x-2">
+              <span className="text-blue-400">$</span>
+              <span className="text-white">{item.command}</span>
+            </div>
+            <div className="text-gray-300 whitespace-pre-wrap ml-4">
+              {item.output}
+            </div>
+          </motion.div>
+        ))}
+
+        {/* Current command input */}
+        <div className="flex items-center space-x-2">
+          <span className="text-blue-400">$</span>
           <input
-            ref={inputRef}
             type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="bg-transparent border-none outline-none w-full text-inherit pl-2"
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
+            onKeyPress={handleKeyPress}
+            className="bg-transparent text-white flex-1 outline-none"
+            placeholder="Type a command or try 'help'..."
             autoFocus
-            autoComplete="off"
-            autoCapitalize="off"
-            spellCheck="false"
           />
         </div>
       </div>
