@@ -11,10 +11,34 @@ from system_monitor import system_monitor
 
 app = FastAPI(title="TerminalX Backend", version="1.0.0")
 
-# Enable CORS for frontend communication
+# Get environment variables
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", 8000))
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+# Configure CORS for Render deployment
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://localhost:3000",
+    "https://127.0.0.1:3000",
+]
+
+# Add frontend URL if provided
+if FRONTEND_URL:
+    allowed_origins.append(FRONTEND_URL)
+
+# Add common Vercel domains
+allowed_origins.extend([
+    "https://*.vercel.app",
+    "https://*.netlify.app",
+    "https://*.render.com"
+])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -111,7 +135,24 @@ def generate_processes():
 
 @app.get("/")
 async def root():
-    return {"message": "TerminalX Backend API", "version": "1.0.0"}
+    return {
+        "message": "TerminalX Backend API", 
+        "version": "1.0.0",
+        "status": "running",
+        "environment": "production" if not DEBUG else "development",
+        "frontend_url": FRONTEND_URL
+    }
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint for Render"""
+    return {
+        "status": "healthy", 
+        "timestamp": datetime.now().isoformat(),
+        "environment": "production" if not DEBUG else "development",
+        "host": HOST,
+        "port": PORT
+    }
 
 @app.post("/api/command", response_model=CommandResponse)
 async def execute_command(request: CommandRequest):
@@ -214,7 +255,7 @@ def handle_help():
         'pwd': 'Print name of current/working directory.',
         'clear': 'Clear the terminal screen.',
         'top': 'Display processor activity (real system data).',
-        'htop': 'Interactive process viewer (real system data).',
+        'htop': 'Enhanced process viewer with bars (real system data).',
         'free': 'Display memory usage (real system data).',
         'df': 'Display disk space usage (real system data).',
         'uptime': 'Show system uptime and load (real system data).',
@@ -550,11 +591,12 @@ async def get_system_info():
     except Exception as e:
         return {"error": f"Failed to get system info: {str(e)}"}
 
-@app.get("/api/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
-
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    print(f"🚀 Starting TerminalX Backend v1.0.0")
+    print(f"📡 Server will be available at: http://{HOST}:{PORT}")
+    print(f"📚 API Documentation: http://{HOST}:{PORT}/docs")
+    print(f"🔧 Debug mode: {'ON' if DEBUG else 'OFF'}")
+    print(f"🌐 Frontend URL: {FRONTEND_URL}")
+    
+    uvicorn.run(app, host=HOST, port=PORT)
