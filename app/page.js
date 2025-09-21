@@ -504,7 +504,7 @@ drwxr-xr-x 2 user user 4096 Dec 25 12:00 projects`;
         return `Removed: ${args[0]}`;
 
       case 'clear':
-        return '\033[2J\033[H';
+        return '[2J[H';
 
       case 'help':
         return `Available commands:
