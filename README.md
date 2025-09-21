@@ -2,7 +2,7 @@
 
 **TerminalX** is a modern **web-based terminal application** powered by **Next.js (frontend)** and **FastAPI (backend)**.  
 It provides an interactive terminal experience along with **real-time system monitoring** (CPU, memory, disk, processes, and more).
-
+ 
 ---
 
 ## 🚀 Features
